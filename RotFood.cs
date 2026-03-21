@@ -29,7 +29,7 @@ namespace RotFood
             U.Events.OnPlayerConnected += OnPlayerConnected;
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood загружен.");
+            Logger.Log("RotFood v1.1 загружен успешно.");
         }
 
         protected override void Unload()
@@ -45,9 +45,10 @@ namespace RotFood
         {
             for (byte page = 0; page < PlayerInventory.PAGES; page++)
             {
-                if (player.Inventory.items[page] != null)
+                var items = player.Inventory.items[page];
+                if (items != null)
                 {
-                    ProcessDecay(player.Inventory.items[page], $"p_{player.CSteamID}_{page}", 1.0f);
+                    ProcessDecay(items, $"p_{player.CSteamID}_{page}", 1.0f);
                 }
             }
         }
@@ -66,12 +67,14 @@ namespace RotFood
 
             if (minutesPassed < 1.0) return;
 
-            for (byte i = (byte)(inventory.getItemCount() - 1); i >= 0; i--)
+            // Идем с конца, чтобы удаление не ломало индексы
+            for (int i = inventory.getItemCount() - 1; i >= 0; i--)
             {
-                ItemJar jar = inventory.getItem(i);
+                ItemJar jar = inventory.getItem((byte)i);
                 if (jar == null || jar.item == null) continue;
 
-                if (Assets.find(EAssetType.ITEM, jar.item.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
+                ItemAsset asset = Assets.find(EAssetType.ITEM, jar.item.id) as ItemAsset;
+                if (asset != null && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
                 {
                     float baseRate = Configuration.Instance.FoodOverrides
                         .FirstOrDefault(x => x.ItemId == jar.item.id)?.DecayRate 
@@ -83,21 +86,18 @@ namespace RotFood
                     {
                         if (jar.item.quality <= damage)
                         {
-                            byte x = jar.x;
-                            byte y = jar.y;
-                            byte rot = jar.rot;
-                            inventory.removeItem(i);
-                            // Самая базовая сигнатура: (Item item, byte x, byte y, byte rot)
-                            inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), x, y, rot);
+                            inventory.removeItem((byte)i);
+                            // Самый стабильный метод: просто добавить в инвентарь (авто-поиск места)
+                            inventory.addItem(new Item(Configuration.Instance.MoldItemId, true));
                         }
                         else
                         {
                             jar.item.quality -= (byte)damage;
-                            inventory.updateQuality(i, jar.item.quality);
+                            // Синхронизация через встроенный метод Items
+                            inventory.updateQuality((byte)i, jar.item.quality);
                         }
                     }
                 }
-                if (i == 0) break;
             }
         }
     }
