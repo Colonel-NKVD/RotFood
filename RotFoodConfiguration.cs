@@ -23,7 +23,7 @@ namespace RotFood
             DefaultDecayRatePerMinute = 0.1f;
             FridgeDecayMultiplier = 0.1f;
             
-            FridgeIds = new List<ushort> { 1230, 1235 };
+            FridgeIds = new List<ushort> { 1249, 1235 };
 
             FoodOverrides = new List<FoodOverride>
             {
