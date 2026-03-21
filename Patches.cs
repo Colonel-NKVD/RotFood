@@ -1,6 +1,5 @@
 using HarmonyLib;
 using SDG.Unturned;
-using UnityEngine;
 
 namespace RotFood
 {
@@ -12,11 +11,13 @@ namespace RotFood
         {
             if (__instance == null || __instance.items == null) return;
 
-            string storageKey = $"str_{__instance.transform.position.ToString()}";
+            string storageKey = $"str_{__instance.transform.position.x}_{__instance.transform.position.y}_{__instance.transform.position.z}";
             float multiplier = 1.0f;
 
-            // У InteractableStorage нет .id, но есть .asset.id
-            if (__instance.asset != null && RotFood.Instance.Configuration.Instance.FridgeIds.Contains(__instance.asset.id))
+            // Правильный способ получить ID для InteractableStorage
+            ushort storageId = __instance.id;
+            
+            if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(storageId))
             {
                 multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
             }
