@@ -1,6 +1,6 @@
 using HarmonyLib;
 using SDG.Unturned;
-using System;
+using UnityEngine;
 
 namespace RotFood
 {
@@ -12,14 +12,11 @@ namespace RotFood
         {
             if (__instance == null || __instance.items == null) return;
 
-            // Определяем уникальный ключ сундука по его позиции
-            string storageKey = $"storage_{__instance.transform.position.ToString()}";
-            
-            // Проверяем, является ли этот предмет холодильником
-            float multiplier = 1.0f; // По умолчанию обычная скорость
-            
-            // Получаем ID предмета (барикады)
-            if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(__instance.id))
+            string storageKey = $"str_{__instance.transform.position.ToString()}";
+            float multiplier = 1.0f;
+
+            // У InteractableStorage нет .id, но есть .asset.id
+            if (__instance.asset != null && RotFood.Instance.Configuration.Instance.FridgeIds.Contains(__instance.asset.id))
             {
                 multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
             }
