@@ -4,26 +4,30 @@ using UnityEngine;
 
 namespace RotFood
 {
-    [HarmonyPatch(typeof(InteractableStorage), "askOpen")]
+    // Используем ручной метод патчинга или проверяем наличие метода.
+    // В новых версиях SDG запрос на открытие идет через ReceiveOpenStorageRequest
+    [HarmonyPatch(typeof(InteractableStorage))]
+    [HarmonyPatch("ReceiveOpenStorageRequest")] 
     public static class StoragePatch
     {
         [HarmonyPrefix]
         public static void Prefix(InteractableStorage __instance)
         {
+            // Если этот метод не найден в твоей версии, Harmony выдаст ту же ошибку.
+            // Проверяем объект и наличие предметов
             if (__instance == null || __instance.items == null) return;
 
-            // Уникальный ключ по координатам
             Vector3 pos = __instance.transform.position;
-            string storageKey = $"str_{pos.x:F1}_{pos.y:F1}_{pos.z:F1}";
+            // Используем координаты как ключ (округляем для стабильности)
+            string storageKey = $"str_{Mathf.RoundToInt(pos.x)}_{Mathf.RoundToInt(pos.y)}_{Mathf.RoundToInt(pos.z)}";
             
             float multiplier = 1.0f;
 
-            // Современный способ получения данных баррикады
-            BarricadeDrop drop = BarricadeManager.FindBarricadeByRootTransform(__instance.transform);
-            if (drop != null)
+            // Получаем данные баррикады
+            var drop = BarricadeManager.FindBarricadeByRootTransform(__instance.transform);
+            if (drop != null && drop.asset != null)
             {
-                ushort storageId = drop.asset.id;
-                if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(storageId))
+                if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(drop.asset.id))
                 {
                     multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
                 }
