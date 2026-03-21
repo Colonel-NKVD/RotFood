@@ -6,7 +6,6 @@ namespace RotFood
 {
     public static class StoragePatch
     {
-        // Убрали атрибуты [HarmonyPatch], чтобы избежать краша при загрузке
         public static void Prefix(InteractableStorage __instance)
         {
             if (__instance == null || __instance.items == null) return;
@@ -25,7 +24,8 @@ namespace RotFood
                 }
             }
 
-            RotFood.Instance.ProcessDecay(__instance.items, storageKey, multiplier);
+            // Изменено название метода
+            RotFood.Instance.ProcessStorageDecay(__instance.items, storageKey, multiplier);
         }
     }
 }
