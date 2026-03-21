@@ -8,8 +8,6 @@ namespace RotFood
     {
         public ushort MoldItemId { get; set; }
         public float DefaultDecayRatePerMinute { get; set; }
-        
-        // Коэффициент гниения в холодильнике (0.1 = в 10 раз медленнее, 0.0 = не гниет)
         public float FridgeDecayMultiplier { get; set; }
         
         [XmlArrayItem("FridgeID")]
@@ -18,19 +16,19 @@ namespace RotFood
         [XmlArrayItem("FoodDecay")]
         public List<FoodOverride> FoodOverrides { get; set; }
 
-        public void Defaults()
+        // Исправленное имя метода для соответствия интерфейсу RocketMod
+        public void LoadDefaults()
         {
             MoldItemId = 70;
-            DefaultDecayRatePerMinute = 0.5f;
-            FridgeDecayMultiplier = 0.1f; 
+            DefaultDecayRatePerMinute = 0.1f;
+            FridgeDecayMultiplier = 0.1f;
             
-            // Стандартные ID холодильников в Unturned (могут меняться от карт/модов)
-            FridgeIds = new List<ushort> { 1230, 1235 }; 
+            FridgeIds = new List<ushort> { 1230, 1235 };
 
-            FoodOverrides = new List<FoodOverride>()
+            FoodOverrides = new List<FoodOverride>
             {
-                new FoodOverride(13, 0.1f),
-                new FoodOverride(81, 2.0f)
+                new FoodOverride(13, 0.01f),
+                new FoodOverride(81, 0.5f)
             };
         }
     }
