@@ -23,7 +23,6 @@ namespace RotFood
             Instance = this;
             _harmony = new Harmony("com.rotfood.patch");
 
-            // План Б: Динамический патчинг сундуков
             var storageType = typeof(InteractableStorage);
             string[] possibleMethods = { "ReceiveOpenStorageRequest", "askOpen", "ReceiveOpen" };
             MethodInfo targetMethod = null;
@@ -44,13 +43,12 @@ namespace RotFood
             Data = _dataManager.Load();
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
-
-            // НОВОЕ: Запускаем проверку активных игроков каждую минуту (60 секунд)
-            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f);
             
+            // Каждую минуту проверяем онлайн-игроков
+            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f);
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.4 (Real-Time Fix) загружен.");
+            Logger.Log("RotFood v1.5 (Network UI Sync) загружен.");
         }
 
         protected override void Unload()
@@ -58,33 +56,14 @@ namespace RotFood
             SaveData();
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
-            
-            // Обязательно отменяем таймеры при выгрузке
             CancelInvoke(nameof(CheckActivePlayers));
             CancelInvoke(nameof(SaveData));
         }
 
         private void SaveData() => _dataManager?.Save(Data);
 
-        private void OnPlayerConnected(UnturnedPlayer player)
-        {
-            CheckPlayerInventory(player);
-        }
+        private void OnPlayerConnected(UnturnedPlayer player) => CheckPlayerInventory(player);
 
-        // Вынес логику проверки игрока в отдельный метод
-        private void CheckPlayerInventory(UnturnedPlayer player)
-        {
-            for (byte page = 0; page < PlayerInventory.PAGES; page++)
-            {
-                var items = player.Inventory.items[page];
-                if (items != null)
-                {
-                    ProcessDecay(items, $"p_{player.CSteamID}_{page}", 1.0f);
-                }
-            }
-        }
-
-        // НОВОЕ: Процесс гниения еды прямо в руках у играющих людей
         private void CheckActivePlayers()
         {
             foreach (var steamPlayer in Provider.clients)
@@ -97,7 +76,70 @@ namespace RotFood
             }
         }
 
-        public void ProcessDecay(Items inventory, string key, float multiplier)
+        // --- ЛОГИКА ДЛЯ ИГРОКА (С СИНХРОНИЗАЦИЕЙ UI) ---
+        private void CheckPlayerInventory(UnturnedPlayer player)
+        {
+            DateTime now = DateTime.Now;
+            string key = $"p_{player.CSteamID}";
+
+            if (!Data.LastUpdates.TryGetValue(key, out DateTime lastUpdate))
+            {
+                Data.LastUpdates[key] = now;
+                return;
+            }
+
+            double minutesPassed = (now - lastUpdate).TotalMinutes;
+            if (minutesPassed < 1.0) return;
+
+            Data.LastUpdates[key] = now;
+
+            for (byte page = 0; page < PlayerInventory.PAGES; page++)
+            {
+                var items = player.Player.inventory.items[page];
+                if (items == null) continue;
+
+                for (int i = items.getItemCount() - 1; i >= 0; i--)
+                {
+                    ItemJar jar = items.getItem((byte)i);
+                    if (jar == null || jar.item == null) continue;
+
+                    if (Assets.find(EAssetType.ITEM, jar.item.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
+                    {
+                        float baseRate = Configuration.Instance.FoodOverrides
+                            .FirstOrDefault(x => x.ItemId == jar.item.id)?.DecayRate 
+                            ?? Configuration.Instance.DefaultDecayRatePerMinute;
+
+                        int damage = Mathf.FloorToInt((float)(minutesPassed * baseRate));
+
+                        if (damage > 0)
+                        {
+                            if (jar.item.quality <= damage)
+                            {
+                                byte x = jar.x;
+                                byte y = jar.y;
+                                
+                                // Убираем старую еду
+                                items.removeItem((byte)i);
+                                // Визуально прячем у клиента (предотвращаем баг "призрачного предмета")
+                                player.Player.inventory.sendUpdateQuality(page, x, y, 0); 
+                                
+                                // Выдаем плесень (этот метод сам синхронизирует появление предмета у клиента)
+                                player.Player.inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), true);
+                            }
+                            else
+                            {
+                                jar.item.quality -= (byte)damage;
+                                // МАГИЯ ЗДЕСЬ: Принудительно обновляем проценты в инвентаре клиента!
+                                player.Player.inventory.sendUpdateQuality(page, jar.x, jar.y, jar.item.quality);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ЛОГИКА ДЛЯ СУНДУКОВ (БЕЗ ИЗМЕНЕНИЙ, ТАК КАК ОНИ СИНХРОНИЗИРУЮТСЯ ПРИ ОТКРЫТИИ) ---
+        public void ProcessStorageDecay(Items inventory, string key, float multiplier)
         {
             DateTime now = DateTime.Now;
             if (!Data.LastUpdates.TryGetValue(key, out DateTime lastUpdate))
@@ -107,11 +149,8 @@ namespace RotFood
             }
 
             double minutesPassed = (now - lastUpdate).TotalMinutes;
-
-            // ИСПРАВЛЕНИЕ ОШИБКИ: Не сбрасываем таймер, если прошло меньше минуты!
             if (minutesPassed < 1.0) return;
 
-            // Теперь таймер обновится только если время реально зачтено
             Data.LastUpdates[key] = now;
 
             for (int i = inventory.getItemCount() - 1; i >= 0; i--)
@@ -125,7 +164,6 @@ namespace RotFood
                         .FirstOrDefault(x => x.ItemId == jar.item.id)?.DecayRate 
                         ?? Configuration.Instance.DefaultDecayRatePerMinute;
 
-                    // Считаем урон с учетом множителя холодильника
                     int damage = Mathf.FloorToInt((float)(minutesPassed * baseRate * multiplier));
 
                     if (damage > 0)
