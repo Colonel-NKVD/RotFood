@@ -29,7 +29,7 @@ namespace RotFood
             U.Events.OnPlayerConnected += OnPlayerConnected;
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.0 загружен.");
+            Logger.Log("RotFood загружен.");
         }
 
         protected override void Unload()
@@ -87,13 +87,12 @@ namespace RotFood
                             byte y = jar.y;
                             byte rot = jar.rot;
                             inventory.removeItem(i);
-                            // Сигнатура tryAddItem для последних версий: (item, x, y, rot, findSpace, autoPack)
-                            inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), x, y, rot, false, false);
+                            // Самая базовая сигнатура: (Item item, byte x, byte y, byte rot)
+                            inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), x, y, rot);
                         }
                         else
                         {
                             jar.item.quality -= (byte)damage;
-                            // Универсальный метод обновления качества
                             inventory.updateQuality(i, jar.item.quality);
                         }
                     }
