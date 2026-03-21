@@ -14,12 +14,19 @@ namespace RotFood
             string storageKey = $"str_{__instance.transform.position.x}_{__instance.transform.position.y}_{__instance.transform.position.z}";
             float multiplier = 1.0f;
 
-            // Правильный способ получить ID для InteractableStorage
-            ushort storageId = __instance.id;
-            
-            if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(storageId))
+            // Ищем данные о баррикаде через регион, в котором она находится
+            if (BarricadeManager.tryGetRegion(__instance.transform, out byte x, out byte y, out ushort plant, out BarricadeRegion region))
             {
-                multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
+                // Ищем конкретную баррикаду по ее трансформу в этом регионе
+                var data = region.barricades.Find(b => b.model == __instance.transform);
+                if (data != null)
+                {
+                    ushort storageId = data.barricade.id;
+                    if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(storageId))
+                    {
+                        multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
+                    }
+                }
             }
 
             RotFood.Instance.ProcessDecay(__instance.items, storageKey, multiplier);
