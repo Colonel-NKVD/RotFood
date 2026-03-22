@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Collections.Generic;
 using Rocket.Core.Plugins;
 using Rocket.Unturned;
 using Rocket.Unturned.Player;
@@ -23,8 +24,8 @@ namespace RotFood
             Instance = this;
             _harmony = new Harmony("com.rotfood.patch");
 
+            // --- НАСТРОЙКА HARMONY ДЛЯ СУНДУКОВ ---
             var storageType = typeof(InteractableStorage);
-            // ИСПРАВЛЕНИЕ: Добавлены современные названия методов для поиска точки входа
             string[] possibleMethods = { "ReceiveInteractRequest", "ReceiveOpenRequest", "ReceiveOpenStorageRequest", "askOpen", "ReceiveOpen" };
             MethodInfo targetMethod = null;
 
@@ -38,26 +39,26 @@ namespace RotFood
             {
                 var prefix = typeof(StoragePatch).GetMethod("Prefix", BindingFlags.Static | BindingFlags.Public);
                 _harmony.Patch(targetMethod, new HarmonyMethod(prefix));
-                Logger.Log($"[RotFood] Harmony успешно привязан к: {targetMethod.Name}");
+                Logger.Log($"[RotFood] Harmony успешно привязан к методу: {targetMethod.Name}");
             }
             else
             {
-                Logger.LogError("[RotFood] ОШИБКА: Не удалось найти метод для патча сундуков!");
+                Logger.LogError("[RotFood] КРИТИЧЕСКАЯ ОШИБКА: Не удалось найти метод для патча сундуков!");
             }
 
+            // --- ЗАГРУЗКА ДАННЫХ ---
             _dataManager = new DataManager(Directory);
             Data = _dataManager.Load();
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
             
-            InvokeRepeating(nameof(IncrementUptime), 60f, 60f); 
-            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); 
-            InvokeRepeating(nameof(SaveData), 300f, 300f);
-            
-            // НОВОЕ: Запуск проверки предметов на полу (раз в минуту)
-            InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);
+            // --- ТАЙМЕРЫ ---
+            InvokeRepeating(nameof(IncrementUptime), 60f, 60f);    // Счетчик минут работы сервера
+            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); // Гниение у игроков онлайн
+            InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);   // Гниение вещей на полу
+            InvokeRepeating(nameof(SaveData), 300f, 300f);         // Автосохранение данных раз в 5 минут
 
-            Logger.Log("RotFood v1.6 (Uptime Mode) загружен. Гниение при выключенном сервере отключено.");
+            Logger.Log("RotFood v1.7 загружен. Полная защита еды (Инвентарь/Сундуки/Пол) активна.");
         }
 
         protected override void Unload()
@@ -65,18 +66,16 @@ namespace RotFood
             SaveData();
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
-            CancelInvoke(nameof(IncrementUptime)); 
-            CancelInvoke(nameof(CheckActivePlayers)); 
+            
+            CancelInvoke(nameof(IncrementUptime));
+            CancelInvoke(nameof(CheckActivePlayers));
+            CancelInvoke(nameof(CheckGroundItems));
             CancelInvoke(nameof(SaveData));
             
-            // НОВОЕ: Остановка проверки предметов на полу
-            CancelInvoke(nameof(CheckGroundItems));
+            Instance = null;
         }
 
-        private void IncrementUptime()
-        {
-            Data.TotalServerUptime++; 
-        }
+        private void IncrementUptime() => Data.TotalServerUptime++;
 
         private void SaveData() => _dataManager?.Save(Data);
 
@@ -94,6 +93,7 @@ namespace RotFood
             }
         }
 
+        // --- ЛОГИКА ДЛЯ ИНВЕНТАРЯ ИГРОКА ---
         private void CheckPlayerInventory(UnturnedPlayer player)
         {
             string key = $"p_{player.CSteamID}";
@@ -149,6 +149,7 @@ namespace RotFood
             }
         }
 
+        // --- ЛОГИКА ДЛЯ СУНДУКОВ (Вызывается из StoragePatch) ---
         public void ProcessStorageDecay(Items inventory, string key, float multiplier)
         {
             long currentUptime = Data.TotalServerUptime;
@@ -193,7 +194,7 @@ namespace RotFood
             }
         }
 
-        // --- НОВАЯ ЛОГИКА: Гниение предметов на полу ---
+        // --- ЛОГИКА ДЛЯ ПРЕДМЕТОВ НА ПОЛУ ---
         private void CheckGroundItems()
         {
             float defaultRate = Configuration.Instance.DefaultDecayRatePerMinute;
@@ -208,27 +209,29 @@ namespace RotFood
                     for (int i = region.drops.Count - 1; i >= 0; i--)
                     {
                         ItemDrop drop = region.drops[i];
-                        if (drop == null || drop.item == null) continue;
+                        if (drop == null) continue;
 
-                        if (Assets.find(EAssetType.ITEM, drop.item.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
+                        Item groundItem = drop.getItem();
+                        if (groundItem == null) continue;
+
+                        if (Assets.find(EAssetType.ITEM, groundItem.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
                         {
                             float rate = Configuration.Instance.FoodOverrides
-                                .FirstOrDefault(o => o.ItemId == drop.item.id)?.DecayRate ?? defaultRate;
+                                .FirstOrDefault(o => o.ItemId == groundItem.id)?.DecayRate ?? defaultRate;
 
-                            // На полу отнимаем минимум 1% в минуту, если рейт задан
+                            // На полу отнимаем минимум 1% в минуту
                             int damage = Mathf.Max(1, Mathf.FloorToInt(rate));
 
-                            if (drop.item.quality <= damage)
+                            if (groundItem.quality <= damage)
                             {
                                 Vector3 lastPos = drop.model.position;
-                                ItemManager.removeItem(x, y, (uint)i);
+                                ItemManager.askClearRegionItem(x, y, (uint)i);
                                 ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
                             }
                             else
                             {
-                                drop.item.quality -= (byte)damage;
-                                // Синхронизация полоски качества для всех игроков рядом
-                                ItemManager.parenthesizeQuality(drop.model, drop.item.quality);
+                                groundItem.quality -= (byte)damage;
+                                ItemManager.sendUpdateQuality(x, y, (uint)i, groundItem.quality);
                             }
                         }
                     }
