@@ -44,11 +44,14 @@ namespace RotFood
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
             
-            // Каждую минуту проверяем онлайн-игроков
+            // НОВОЕ: Счетчик аптайма сервера (тикает раз в минуту)
+            InvokeRepeating(nameof(IncrementUptime), 60f, 60f);
+
+            // Каждую минуту проверяем онлайн-игроков[cite: 2]
             InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f);
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.5 (Network UI Sync) загружен.");
+            Logger.Log("RotFood v1.6 (Uptime Mode) загружен. Гниение при выключенном сервере отключено.");
         }
 
         protected override void Unload()
@@ -56,8 +59,15 @@ namespace RotFood
             SaveData();
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
+            CancelInvoke(nameof(IncrementUptime)); //[cite: 2]
             CancelInvoke(nameof(CheckActivePlayers));
             CancelInvoke(nameof(SaveData));
+        }
+
+        private void IncrementUptime()
+        {
+            // Увеличиваем общий счетчик работы сервера (только пока плагин загружен)[cite: 2]
+            Data.TotalServerUptime++;
         }
 
         private void SaveData() => _dataManager?.Save(Data);
@@ -79,19 +89,20 @@ namespace RotFood
         // --- ЛОГИКА ДЛЯ ИГРОКА (С СИНХРОНИЗАЦИЕЙ UI) ---
         private void CheckPlayerInventory(UnturnedPlayer player)
         {
-            DateTime now = DateTime.Now;
             string key = $"p_{player.CSteamID}";
+            long currentUptime = Data.TotalServerUptime;
 
-            if (!Data.LastUpdates.TryGetValue(key, out DateTime lastUpdate))
+            // Используем новую систему UptimeCheck вместо DateTime[cite: 2]
+            if (!Data.LastUptimeCheck.TryGetValue(key, out long lastCheck))
             {
-                Data.LastUpdates[key] = now;
+                Data.LastUptimeCheck[key] = currentUptime;
                 return;
             }
 
-            double minutesPassed = (now - lastUpdate).TotalMinutes;
-            if (minutesPassed < 1.0) return;
+            long minutesPassed = currentUptime - lastCheck;
+            if (minutesPassed < 1) return;
 
-            Data.LastUpdates[key] = now;
+            Data.LastUptimeCheck[key] = currentUptime;
 
             for (byte page = 0; page < PlayerInventory.PAGES; page++)
             {
@@ -117,19 +128,13 @@ namespace RotFood
                             {
                                 byte x = jar.x;
                                 byte y = jar.y;
-                                
-                                // Убираем старую еду
                                 items.removeItem((byte)i);
-                                // Визуально прячем у клиента (предотвращаем баг "призрачного предмета")
                                 player.Player.inventory.sendUpdateQuality(page, x, y, 0); 
-                                
-                                // Выдаем плесень (этот метод сам синхронизирует появление предмета у клиента)
                                 player.Player.inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), true);
                             }
                             else
                             {
                                 jar.item.quality -= (byte)damage;
-                                // МАГИЯ ЗДЕСЬ: Принудительно обновляем проценты в инвентаре клиента!
                                 player.Player.inventory.sendUpdateQuality(page, jar.x, jar.y, jar.item.quality);
                             }
                         }
@@ -138,20 +143,21 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ СУНДУКОВ (БЕЗ ИЗМЕНЕНИЙ, ТАК КАК ОНИ СИНХРОНИЗИРУЮТСЯ ПРИ ОТКРЫТИИ) ---
+        // --- ЛОГИКА ДЛЯ СУНДУКОВ ---
         public void ProcessStorageDecay(Items inventory, string key, float multiplier)
         {
-            DateTime now = DateTime.Now;
-            if (!Data.LastUpdates.TryGetValue(key, out DateTime lastUpdate))
+            long currentUptime = Data.TotalServerUptime;
+
+            if (!Data.LastUptimeCheck.TryGetValue(key, out long lastCheck))
             {
-                Data.LastUpdates[key] = now;
+                Data.LastUptimeCheck[key] = currentUptime;
                 return;
             }
 
-            double minutesPassed = (now - lastUpdate).TotalMinutes;
-            if (minutesPassed < 1.0) return;
+            long minutesPassed = currentUptime - lastCheck;
+            if (minutesPassed < 1) return;
 
-            Data.LastUpdates[key] = now;
+            Data.LastUptimeCheck[key] = currentUptime;
 
             for (int i = inventory.getItemCount() - 1; i >= 0; i--)
             {
