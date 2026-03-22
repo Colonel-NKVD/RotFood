@@ -24,7 +24,6 @@ namespace RotFood
             Instance = this;
             _harmony = new Harmony("com.rotfood.patch");
 
-            // --- НАСТРОЙКА HARMONY ДЛЯ СУНДУКОВ ---
             var storageType = typeof(InteractableStorage);
             string[] possibleMethods = { "ReceiveInteractRequest", "ReceiveOpenRequest", "ReceiveOpenStorageRequest", "askOpen", "ReceiveOpen" };
             MethodInfo targetMethod = null;
@@ -39,26 +38,24 @@ namespace RotFood
             {
                 var prefix = typeof(StoragePatch).GetMethod("Prefix", BindingFlags.Static | BindingFlags.Public);
                 _harmony.Patch(targetMethod, new HarmonyMethod(prefix));
-                Logger.Log($"[RotFood] Harmony успешно привязан к методу: {targetMethod.Name}");
+                Logger.Log($"[RotFood] Harmony успешно привязан к: {targetMethod.Name}");
             }
             else
             {
-                Logger.LogError("[RotFood] КРИТИЧЕСКАЯ ОШИБКА: Не удалось найти метод для патча сундуков!");
+                Logger.LogError("[RotFood] ОШИБКА: Не удалось найти метод для патча сундуков!");
             }
 
-            // --- ЗАГРУЗКА ДАННЫХ ---
             _dataManager = new DataManager(Directory);
             Data = _dataManager.Load();
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
             
-            // --- ТАЙМЕРЫ ---
-            InvokeRepeating(nameof(IncrementUptime), 60f, 60f);    // Счетчик минут работы сервера
-            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); // Гниение у игроков онлайн
-            InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);   // Гниение вещей на полу
-            InvokeRepeating(nameof(SaveData), 300f, 300f);         // Автосохранение данных раз в 5 минут
+            InvokeRepeating(nameof(IncrementUptime), 60f, 60f); 
+            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); 
+            InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);
+            InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.7 загружен. Полная защита еды (Инвентарь/Сундуки/Пол) активна.");
+            Logger.Log("RotFood v1.7.1 загружен. Все системы гниения активны.");
         }
 
         protected override void Unload()
@@ -66,13 +63,10 @@ namespace RotFood
             SaveData();
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
-            
-            CancelInvoke(nameof(IncrementUptime));
-            CancelInvoke(nameof(CheckActivePlayers));
+            CancelInvoke(nameof(IncrementUptime)); 
+            CancelInvoke(nameof(CheckActivePlayers)); 
             CancelInvoke(nameof(CheckGroundItems));
             CancelInvoke(nameof(SaveData));
-            
-            Instance = null;
         }
 
         private void IncrementUptime() => Data.TotalServerUptime++;
@@ -93,7 +87,6 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ ИНВЕНТАРЯ ИГРОКА ---
         private void CheckPlayerInventory(UnturnedPlayer player)
         {
             string key = $"p_{player.CSteamID}";
@@ -149,7 +142,6 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ СУНДУКОВ (Вызывается из StoragePatch) ---
         public void ProcessStorageDecay(Items inventory, string key, float multiplier)
         {
             long currentUptime = Data.TotalServerUptime;
@@ -194,7 +186,6 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ ПРЕДМЕТОВ НА ПОЛУ ---
         private void CheckGroundItems()
         {
             float defaultRate = Configuration.Instance.DefaultDecayRatePerMinute;
@@ -209,7 +200,6 @@ namespace RotFood
                     for (int i = region.drops.Count - 1; i >= 0; i--)
                     {
                         ItemDrop drop = region.drops[i];
-                        // ИСПРАВЛЕНИЕ: Пробуем обращаться напрямую к полю item
                         if (drop == null || drop.item == null) continue;
 
                         Item groundItem = drop.item;
@@ -224,14 +214,12 @@ namespace RotFood
                             if (groundItem.quality <= damage)
                             {
                                 Vector3 lastPos = drop.model.position;
-                                // ИСПРАВЛЕНИЕ: Универсальный метод удаления
                                 ItemManager.removeItem(x, y, (uint)i);
                                 ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
                             }
                             else
                             {
                                 groundItem.quality -= (byte)damage;
-                                // ИСПРАВЛЕНИЕ: Используем старый добрый метод синхронизации полоски
                                 ItemManager.parenthesizeQuality(drop.model, groundItem.quality);
                             }
                         }
@@ -239,3 +227,5 @@ namespace RotFood
                 }
             }
         }
+    }
+}
