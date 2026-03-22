@@ -55,7 +55,7 @@ namespace RotFood
             InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.7.2 загружен. Все системы гниения (Инвентарь/Сундуки/Пол) активны.");
+            Logger.Log("RotFood v1.7.3 загружен. Оптимизировано под API.");
         }
 
         protected override void Unload()
@@ -200,11 +200,9 @@ namespace RotFood
                     for (int i = region.drops.Count - 1; i >= 0; i--)
                     {
                         ItemDrop drop = region.drops[i];
-                        if (drop == null) continue;
+                        if (drop == null || drop.item == null) continue;
 
-                        // ИСПОЛЬЗУЕМ getItem() ДЛЯ НОВЫХ ВЕРСИЙ API
-                        Item groundItem = drop.getItem();
-                        if (groundItem == null) continue;
+                        Item groundItem = drop.item;
 
                         if (Assets.find(EAssetType.ITEM, groundItem.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
                         {
@@ -216,15 +214,15 @@ namespace RotFood
                             if (groundItem.quality <= damage)
                             {
                                 Vector3 lastPos = drop.model.position;
-                                // ИСПОЛЬЗУЕМ askClearRegionItem ДЛЯ УДАЛЕНИЯ
-                                ItemManager.askClearRegionItem(x, y, (uint)i);
+                                // Используем универсальный метод для старых API
+                                ItemManager.removeItem(x, y, (uint)i);
                                 ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
                             }
                             else
                             {
                                 groundItem.quality -= (byte)damage;
-                                // ИСПОЛЬЗУЕМ sendUpdateQuality ДЛЯ СИНХРОНИЗАЦИИ
-                                ItemManager.sendUpdateQuality(x, y, (uint)i, groundItem.quality);
+                                // Используем универсальный метод визуального обновления
+                                ItemManager.parenthesizeQuality(drop.model, groundItem.quality);
                             }
                         }
                     }
