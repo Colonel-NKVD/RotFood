@@ -55,7 +55,7 @@ namespace RotFood
             InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
-            Logger.Log("RotFood v1.7.1 загружен. Все системы гниения активны.");
+            Logger.Log("RotFood v1.7.2 загружен. Все системы гниения (Инвентарь/Сундуки/Пол) активны.");
         }
 
         protected override void Unload()
@@ -200,9 +200,11 @@ namespace RotFood
                     for (int i = region.drops.Count - 1; i >= 0; i--)
                     {
                         ItemDrop drop = region.drops[i];
-                        if (drop == null || drop.item == null) continue;
+                        if (drop == null) continue;
 
-                        Item groundItem = drop.item;
+                        // ИСПОЛЬЗУЕМ getItem() ДЛЯ НОВЫХ ВЕРСИЙ API
+                        Item groundItem = drop.getItem();
+                        if (groundItem == null) continue;
 
                         if (Assets.find(EAssetType.ITEM, groundItem.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
                         {
@@ -214,13 +216,15 @@ namespace RotFood
                             if (groundItem.quality <= damage)
                             {
                                 Vector3 lastPos = drop.model.position;
-                                ItemManager.removeItem(x, y, (uint)i);
+                                // ИСПОЛЬЗУЕМ askClearRegionItem ДЛЯ УДАЛЕНИЯ
+                                ItemManager.askClearRegionItem(x, y, (uint)i);
                                 ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
                             }
                             else
                             {
                                 groundItem.quality -= (byte)damage;
-                                ItemManager.parenthesizeQuality(drop.model, groundItem.quality);
+                                // ИСПОЛЬЗУЕМ sendUpdateQuality ДЛЯ СИНХРОНИЗАЦИИ
+                                ItemManager.sendUpdateQuality(x, y, (uint)i, groundItem.quality);
                             }
                         }
                     }
