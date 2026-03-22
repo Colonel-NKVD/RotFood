@@ -50,9 +50,12 @@ namespace RotFood
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
             
-            InvokeRepeating(nameof(IncrementUptime), 60f, 60f); //[cite: 2]
-            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); //[cite: 2]
+            InvokeRepeating(nameof(IncrementUptime), 60f, 60f); 
+            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); 
             InvokeRepeating(nameof(SaveData), 300f, 300f);
+            
+            // НОВОЕ: Запуск проверки предметов на полу (раз в минуту)
+            InvokeRepeating(nameof(CheckGroundItems), 60f, 60f);
 
             Logger.Log("RotFood v1.6 (Uptime Mode) загружен. Гниение при выключенном сервере отключено.");
         }
@@ -62,14 +65,17 @@ namespace RotFood
             SaveData();
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
-            CancelInvoke(nameof(IncrementUptime)); //[cite: 2]
-            CancelInvoke(nameof(CheckActivePlayers)); //[cite: 2]
+            CancelInvoke(nameof(IncrementUptime)); 
+            CancelInvoke(nameof(CheckActivePlayers)); 
             CancelInvoke(nameof(SaveData));
+            
+            // НОВОЕ: Остановка проверки предметов на полу
+            CancelInvoke(nameof(CheckGroundItems));
         }
 
         private void IncrementUptime()
         {
-            Data.TotalServerUptime++; //[cite: 2]
+            Data.TotalServerUptime++; 
         }
 
         private void SaveData() => _dataManager?.Save(Data);
@@ -176,14 +182,54 @@ namespace RotFood
                         if (jar.item.quality <= damage)
                         {
                             inventory.removeItem((byte)i);
-                            // ИСПРАВЛЕНИЕ: У класса Items tryAddItem принимает только 1 аргумент
                             inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true));
                         }
                         else
                         {
-                            // ИСПРАВЛЕНИЕ: Прямое изменение качества. 
-                            // Метода updateQuality не существует в классе Items.
                             jar.item.quality -= (byte)damage;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- НОВАЯ ЛОГИКА: Гниение предметов на полу ---
+        private void CheckGroundItems()
+        {
+            float defaultRate = Configuration.Instance.DefaultDecayRatePerMinute;
+            ushort moldId = Configuration.Instance.MoldItemId;
+
+            for (byte x = 0; x < Regions.WORLD_SIZE; x++)
+            {
+                for (byte y = 0; y < Regions.WORLD_SIZE; y++)
+                {
+                    ItemRegion region = ItemManager.regions[x, y];
+                    
+                    for (int i = region.drops.Count - 1; i >= 0; i--)
+                    {
+                        ItemDrop drop = region.drops[i];
+                        if (drop == null || drop.item == null) continue;
+
+                        if (Assets.find(EAssetType.ITEM, drop.item.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
+                        {
+                            float rate = Configuration.Instance.FoodOverrides
+                                .FirstOrDefault(o => o.ItemId == drop.item.id)?.DecayRate ?? defaultRate;
+
+                            // На полу отнимаем минимум 1% в минуту, если рейт задан
+                            int damage = Mathf.Max(1, Mathf.FloorToInt(rate));
+
+                            if (drop.item.quality <= damage)
+                            {
+                                Vector3 lastPos = drop.model.position;
+                                ItemManager.removeItem(x, y, (uint)i);
+                                ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
+                            }
+                            else
+                            {
+                                drop.item.quality -= (byte)damage;
+                                // Синхронизация полоски качества для всех игроков рядом
+                                ItemManager.parenthesizeQuality(drop.model, drop.item.quality);
+                            }
                         }
                     }
                 }
