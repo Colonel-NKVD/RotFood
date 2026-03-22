@@ -15,16 +15,19 @@ namespace RotFood
             
             float multiplier = 1.0f;
 
-            var drop = BarricadeManager.FindBarricadeByRootTransform(__instance.transform);
-            if (drop != null && drop.asset != null)
+            // ИСПРАВЛЕНИЕ: Правильный способ получения информации о баррикаде в Unturned API
+            if (BarricadeManager.tryGetInfo(__instance.transform, out byte x, out byte y, out ushort plant, out ushort index, out BarricadeRegion region))
             {
-                if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(drop.asset.id))
+                if (region != null && index < region.barricades.Count)
                 {
-                    multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
+                    ushort id = region.barricades[index].barricade.asset.id;
+                    if (RotFood.Instance.Configuration.Instance.FridgeIds.Contains(id))
+                    {
+                        multiplier = RotFood.Instance.Configuration.Instance.FridgeDecayMultiplier;
+                    }
                 }
             }
 
-            // Изменено название метода
             RotFood.Instance.ProcessStorageDecay(__instance.items, storageKey, multiplier);
         }
     }
