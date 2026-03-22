@@ -5,12 +5,13 @@ namespace RotFood
 {
     public class DecayData
     {
-        // Ключ: уникальный ID (игрока или сундука), Значение: время последнего обновления
-        public Dictionary<string, DateTime> LastUpdates { get; set; }
+        // Новое поле: Общий аптайм сервера в минутах
+        public long TotalServerUptime { get; set; } = 0;
+        
+        // Новые метки: Хранят значение TotalServerUptime на момент последней проверки
+        public Dictionary<string, long> LastUptimeCheck { get; set; } = new Dictionary<string, long>();
 
-        public DecayData()
-        {
-            LastUpdates = new Dictionary<string, DateTime>();
-        }
+        // Оставляем старые метки для обратной совместимости (не убираем функционал)
+        public Dictionary<string, DateTime> LastUpdates { get; set; } = new Dictionary<string, DateTime>();
     }
 }
