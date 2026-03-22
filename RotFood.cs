@@ -209,34 +209,33 @@ namespace RotFood
                     for (int i = region.drops.Count - 1; i >= 0; i--)
                     {
                         ItemDrop drop = region.drops[i];
-                        if (drop == null) continue;
+                        // ИСПРАВЛЕНИЕ: Пробуем обращаться напрямую к полю item
+                        if (drop == null || drop.item == null) continue;
 
-                        Item groundItem = drop.getItem();
-                        if (groundItem == null) continue;
+                        Item groundItem = drop.item;
 
                         if (Assets.find(EAssetType.ITEM, groundItem.id) is ItemAsset asset && (asset.type == EItemType.FOOD || asset.type == EItemType.WATER))
                         {
                             float rate = Configuration.Instance.FoodOverrides
                                 .FirstOrDefault(o => o.ItemId == groundItem.id)?.DecayRate ?? defaultRate;
 
-                            // На полу отнимаем минимум 1% в минуту
                             int damage = Mathf.Max(1, Mathf.FloorToInt(rate));
 
                             if (groundItem.quality <= damage)
                             {
                                 Vector3 lastPos = drop.model.position;
-                                ItemManager.askClearRegionItem(x, y, (uint)i);
+                                // ИСПРАВЛЕНИЕ: Универсальный метод удаления
+                                ItemManager.removeItem(x, y, (uint)i);
                                 ItemManager.dropItem(new Item(moldId, true), lastPos, false, false, false);
                             }
                             else
                             {
                                 groundItem.quality -= (byte)damage;
-                                ItemManager.sendUpdateQuality(x, y, (uint)i, groundItem.quality);
+                                // ИСПРАВЛЕНИЕ: Используем старый добрый метод синхронизации полоски
+                                ItemManager.parenthesizeQuality(drop.model, groundItem.quality);
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
