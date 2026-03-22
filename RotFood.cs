@@ -24,7 +24,8 @@ namespace RotFood
             _harmony = new Harmony("com.rotfood.patch");
 
             var storageType = typeof(InteractableStorage);
-            string[] possibleMethods = { "ReceiveOpenStorageRequest", "askOpen", "ReceiveOpen" };
+            // ИСПРАВЛЕНИЕ: Добавлены современные названия методов для поиска точки входа
+            string[] possibleMethods = { "ReceiveInteractRequest", "ReceiveOpenRequest", "ReceiveOpenStorageRequest", "askOpen", "ReceiveOpen" };
             MethodInfo targetMethod = null;
 
             foreach (var methodName in possibleMethods)
@@ -37,6 +38,11 @@ namespace RotFood
             {
                 var prefix = typeof(StoragePatch).GetMethod("Prefix", BindingFlags.Static | BindingFlags.Public);
                 _harmony.Patch(targetMethod, new HarmonyMethod(prefix));
+                Logger.Log($"[RotFood] Harmony успешно привязан к: {targetMethod.Name}");
+            }
+            else
+            {
+                Logger.LogError("[RotFood] ОШИБКА: Не удалось найти метод для патча сундуков!");
             }
 
             _dataManager = new DataManager(Directory);
@@ -44,11 +50,8 @@ namespace RotFood
 
             U.Events.OnPlayerConnected += OnPlayerConnected;
             
-            // НОВОЕ: Счетчик аптайма сервера (тикает раз в минуту)
-            InvokeRepeating(nameof(IncrementUptime), 60f, 60f);
-
-            // Каждую минуту проверяем онлайн-игроков[cite: 2]
-            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f);
+            InvokeRepeating(nameof(IncrementUptime), 60f, 60f); //[cite: 2]
+            InvokeRepeating(nameof(CheckActivePlayers), 60f, 60f); //[cite: 2]
             InvokeRepeating(nameof(SaveData), 300f, 300f);
 
             Logger.Log("RotFood v1.6 (Uptime Mode) загружен. Гниение при выключенном сервере отключено.");
@@ -60,14 +63,13 @@ namespace RotFood
             _harmony?.UnpatchAll("com.rotfood.patch");
             U.Events.OnPlayerConnected -= OnPlayerConnected;
             CancelInvoke(nameof(IncrementUptime)); //[cite: 2]
-            CancelInvoke(nameof(CheckActivePlayers));
+            CancelInvoke(nameof(CheckActivePlayers)); //[cite: 2]
             CancelInvoke(nameof(SaveData));
         }
 
         private void IncrementUptime()
         {
-            // Увеличиваем общий счетчик работы сервера (только пока плагин загружен)[cite: 2]
-            Data.TotalServerUptime++;
+            Data.TotalServerUptime++; //[cite: 2]
         }
 
         private void SaveData() => _dataManager?.Save(Data);
@@ -86,13 +88,11 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ ИГРОКА (С СИНХРОНИЗАЦИЕЙ UI) ---
         private void CheckPlayerInventory(UnturnedPlayer player)
         {
             string key = $"p_{player.CSteamID}";
             long currentUptime = Data.TotalServerUptime;
 
-            // Используем новую систему UptimeCheck вместо DateTime[cite: 2]
             if (!Data.LastUptimeCheck.TryGetValue(key, out long lastCheck))
             {
                 Data.LastUptimeCheck[key] = currentUptime;
@@ -143,7 +143,6 @@ namespace RotFood
             }
         }
 
-        // --- ЛОГИКА ДЛЯ СУНДУКОВ ---
         public void ProcessStorageDecay(Items inventory, string key, float multiplier)
         {
             long currentUptime = Data.TotalServerUptime;
@@ -177,12 +176,14 @@ namespace RotFood
                         if (jar.item.quality <= damage)
                         {
                             inventory.removeItem((byte)i);
-                            inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true), true);
+                            // ИСПРАВЛЕНИЕ: У класса Items tryAddItem принимает только 1 аргумент
+                            inventory.tryAddItem(new Item(Configuration.Instance.MoldItemId, true));
                         }
                         else
                         {
+                            // ИСПРАВЛЕНИЕ: Прямое изменение качества. 
+                            // Метода updateQuality не существует в классе Items.
                             jar.item.quality -= (byte)damage;
-                            inventory.updateQuality((byte)i, jar.item.quality);
                         }
                     }
                 }
